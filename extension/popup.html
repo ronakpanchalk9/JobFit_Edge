@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JobFit</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="app">
+    <header><div class="mark">J</div><div><div class="eyebrow">CAREER COMPANION</div><h1>JobFit</h1></div><span class="privacy">LOCAL FIRST</span></header>
+    <p class="intro">See how your experience lines up with a role.</p>
+    <section class="resume-section">
+      <div class="label-row"><label>Your saved resume</label><button class="text-button" id="refresh-resume" type="button">↻ Refresh</button></div>
+      <div class="resume-card"><span class="resume-icon">▤</span><div><strong id="resume-name">Resume folder</strong><span id="resume-status">Start the local helper to load your resume.</span></div></div>
+    </section>
+    <section>
+      <div class="label-row"><label for="description">Job description</label><button class="text-button" id="scan" type="button">↧ Scan this page</button></div>
+      <textarea id="description" rows="7" placeholder="Paste a job description, or scan the active job page…"></textarea>
+    </section>
+    <section class="yoe-section">
+      <div class="label-row"><label>Years of experience (YOE)</label><span class="yoe-priority">HIGH PRIORITY</span></div>
+      <div class="yoe-grid">
+        <div class="yoe-value"><span>Minimum required</span><strong id="minimum-yoe">Detecting…</strong></div>
+        <div class="yoe-value"><span>Your experience</span><strong id="candidate-yoe">Detecting…</strong></div>
+      </div>
+      <p class="yoe-note">Detected from the job description and resume. YOE is weighted at 60% when a minimum is stated.</p>
+    </section>
+    <button class="primary" id="analyze" type="button">Check my fit <span>→</span></button>
+    <p id="status" role="status" aria-live="polite"></p>
+    <section id="result" hidden aria-live="polite">
+      <div class="score-card"><div><div class="eyebrow">OVERALL MATCH</div><div class="score"><span id="score">—</span><small>%</small></div></div><div id="verdict" class="verdict"></div></div>
+      <div class="metrics"><div><span>Skills match</span><strong id="skill-score">—</strong></div><div><span>Experience match</span><strong id="experience-score">—</strong></div></div>
+      <div class="detail"><h2>Strong matches</h2><p id="matched"></p></div>
+      <div class="detail"><h2>Potential gaps</h2><p id="missing"></p></div>
+      <div id="ai-note" class="ai-note" hidden></div>
+      <p class="disclaimer">An estimate based on the text provided, not a hiring decision.</p>
+    </section>
+    <footer>Resume, job text, and results stay saved in this browser.</footer>
+  </main>
+  <script src="matcher.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
