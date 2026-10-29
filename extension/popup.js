@@ -167,7 +167,9 @@ analyzeBtn.addEventListener('click', async () => {
       if (!response.ok) throw new Error(data.detail || `AI helper returned HTTP ${response.status}.`);
       if (!data.ai_enabled || !Array.isArray(data.matched_skills) || !Array.isArray(data.missing_skills) || !data.ai_summary) throw new Error('OpenAI returned incomplete match data.');
       renderResult(data);
-      const message = 'Match results from OpenAI.';
+      let message = 'Match results from OpenAI. Gaps appended to local CSV.';
+      try { await JobFitMatcher.appendGapCsv(companyName, data, analysisId); }
+      catch (_csvError) { message = 'Match results from OpenAI. Could not append to local CSV; browser history is saved.'; }
       setStatus(message);
       const gapHistory = await JobFitMatcher.saveGapRecord(companyName, data, analysisId);
       await chrome.storage.local.set({ isMatching: false, lastMatch: data, lastMatchSource: 'openai', lastMatchStatus: message, gapHistory });
@@ -175,7 +177,9 @@ analyzeBtn.addEventListener('click', async () => {
       const result = JobFitMatcher.localMatch(resumeText, jdEl.value.trim());
       renderResult(result);
       const gapHistory = await JobFitMatcher.saveGapRecord(companyName, result, analysisId);
-      const message = `API unavailable; showing local estimate. ${apiError.message || error.message || 'Could not complete analysis.'}`;
+      let message = `API unavailable; showing local estimate. ${apiError.message || error.message || 'Could not complete analysis.'}`;
+      try { await JobFitMatcher.appendGapCsv(companyName, result, analysisId); message += ' Gaps appended to local CSV.'; }
+      catch (_csvError) { message += ' Local CSV could not be reached; browser history is saved.'; }
       setStatus(message, true);
       await chrome.storage.local.set({ isMatching: false, lastMatch: result, lastMatchSource: 'local', lastMatchStatus: message, gapHistory });
     }

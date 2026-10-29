@@ -87,5 +87,20 @@ globalThis.JobFitMatcher = (() => {
     return updated;
   }
 
-  return { skills, minimumYears, candidateYears, localMatch, saveGapRecord };
+  async function appendGapCsv(companyName, result, analysisId) {
+    const response = await fetch('http://127.0.0.1:8766/api/gaps', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        analysis_id: analysisId,
+        company_name: String(companyName || '').trim(),
+        gaps: Array.isArray(result.missing_skills) ? result.missing_skills : [],
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || `Gap CSV helper returned HTTP ${response.status}.`);
+    return data;
+  }
+
+  return { skills, minimumYears, candidateYears, localMatch, saveGapRecord, appendGapCsv };
 })();

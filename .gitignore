@@ -3,6 +3,7 @@ __pycache__/
 .env
 .env.local
 .run/
+Gap_CSV/
 Resume/*
 !Resume/README.md
 !Resume/.gitkeep

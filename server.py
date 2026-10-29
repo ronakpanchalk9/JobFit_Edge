@@ -1,6 +1,9 @@
 """Local resume matcher using LangChain retrieval and OpenAI models."""
 import os
 import re
+import csv
+import json
+import threading
 from pathlib import Path
 from datetime import datetime
 import io
@@ -18,6 +21,11 @@ load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
 app = FastAPI(title="JobFit local helper")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 RESUME_DIR = Path(__file__).resolve().parent / "Resume"
+GAP_CSV_DIR = Path(__file__).resolve().parent / "Gap_CSV"
+GAP_CSV_PATH = GAP_CSV_DIR / "job_gaps.csv"
+GAP_IDS_PATH = GAP_CSV_DIR / ".recorded_ids.json"
+GAP_CSV_DIR.mkdir(parents=True, exist_ok=True)
+GAP_CSV_LOCK = threading.Lock()
 SUPPORTED_RESUME_TYPES = {".pdf", ".docx", ".txt", ".md"}
 RESUME_SPLITTER = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=200)
 
@@ -122,6 +130,12 @@ class MatchRequest(BaseModel):
     job_description: str
 
 
+class GapRecordRequest(BaseModel):
+    analysis_id: str = Field(min_length=1, max_length=120)
+    company_name: str = Field(min_length=1, max_length=160)
+    gaps: list[str] = Field(default_factory=list, max_length=50)
+
+
 def extract_resume_text(filename: str, contents: bytes) -> str:
     suffix = Path(filename).suffix.lower()
     if suffix in {".txt", ".md"}:
@@ -140,6 +154,43 @@ def health():
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     configured = bool(api_key and api_key != "your-openai-api-key-here")
     return {"ok": True, "ai_enabled": configured}
+
+
+@app.post("/api/gaps")
+def append_gap_record(request: GapRecordRequest):
+    """Append one company and its missing skills to the local CSV tracker."""
+    GAP_CSV_DIR.mkdir(parents=True, exist_ok=True)
+    with GAP_CSV_LOCK:
+        try:
+            recorded_ids = json.loads(GAP_IDS_PATH.read_text(encoding="utf-8")) if GAP_IDS_PATH.exists() else []
+        except (json.JSONDecodeError, OSError):
+            recorded_ids = []
+        if request.analysis_id in recorded_ids:
+            return {"saved": True, "duplicate": True}
+
+        is_new_file = not GAP_CSV_PATH.exists() or GAP_CSV_PATH.stat().st_size == 0
+        with GAP_CSV_PATH.open("a", newline="", encoding="utf-8") as csv_file:
+            if is_new_file:
+                csv_file.write("\ufeff")
+            writer = csv.writer(csv_file)
+            if is_new_file:
+                writer.writerow(["Company Name", "Gaps"])
+            company = request.company_name.strip()
+            if not company:
+                raise HTTPException(422, "Company name cannot be blank.")
+            if company.startswith(("=", "+", "-", "@")):
+                company = "'" + company
+            gaps = [gap.strip() for gap in request.gaps if gap.strip()]
+            gaps_text = "; ".join(gaps)
+            if gaps_text.startswith(("=", "+", "-", "@")):
+                gaps_text = "'" + gaps_text
+            writer.writerow([company, gaps_text])
+
+        recorded_ids.append(request.analysis_id)
+        temporary_ids_path = GAP_IDS_PATH.with_suffix(".tmp")
+        temporary_ids_path.write_text(json.dumps(recorded_ids[-5000:]), encoding="utf-8")
+        temporary_ids_path.replace(GAP_IDS_PATH)
+    return {"saved": True, "duplicate": False, "path": str(GAP_CSV_PATH)}
 
 
 @app.get("/api/resume")

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "JobFit — Resume Matcher",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Compare your resume with a job description on LinkedIn, Naukri, Indeed, or any job page.",
   "permissions": ["activeTab", "scripting", "storage"],
   "background": { "service_worker": "background.js" },
