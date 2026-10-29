@@ -25,12 +25,12 @@ RESUME_SPLITTER = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=2
 class SkillMatch(BaseModel):
     ai_summary: str = Field(description="One concise sentence, at most 20 words, stating strongest fit and main gap.")
     skill_score: int = Field(ge=0, le=100, description="Evidence-based skill match score from 0 to 100.")
-    matched_skills: list[str] = Field(description="At most 6 key skills evidenced in the resume and required by the job.")
-    missing_skills: list[str] = Field(description="At most 6 key job skills not evidenced in the resume.")
+    matched_skills: list[str] = Field(description="At most 6 concise skill or tool names evidenced in the resume and required by the job.")
+    missing_skills: list[str] = Field(description="At most 12 concise names of concrete skills, tools, methods, or competencies required by the job but absent from resume evidence. Return labels only, never sentences, experience requirements, or explanations.")
 
 
 MATCH_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """Compare the resume evidence directly with the job description. Do not invent experience or infer protected traits. The retrieved resume passages are relevant excerpts; treat the full resume only as represented by those excerpts. Score skills from 0 to 100 based on evidence. List at most 6 key items in each skill list. The summary must be one concise sentence of at most 20 words stating the strongest fit and main gap; do not repeat scores or list skills. Years of experience is high priority; if candidate experience is below the stated minimum, clearly mention that gap in the summary."""),
+    ("system", """Compare the resume evidence directly with the job description. Do not invent experience or infer protected traits. The retrieved resume passages are relevant excerpts; treat the full resume only as represented by those excerpts. Score skills from 0 to 100 based on evidence. List at most 6 key items in matched_skills and at most 12 in missing_skills. For missing_skills, return only short labels for concrete skills, tools, methods, or competencies that the job requires and the resume does not evidence. Never put sentences, explanations, years-of-experience requirements, or broad job duties in missing_skills. If a skill is evidenced in the resume, do not list it as missing. The summary must be one concise sentence of at most 20 words stating the strongest fit and main gap; do not repeat scores or list skills. Years of experience is high priority; if candidate experience is below the stated minimum, clearly mention that gap in the summary."""),
     ("human", """Automatically detected experience — minimum required by job: {minimum_years}; candidate experience: {candidate_years}.
 
 Relevant resume excerpts:

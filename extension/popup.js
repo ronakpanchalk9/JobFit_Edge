@@ -1,4 +1,7 @@
 const jdEl = document.querySelector('#description');
+const companyEl = document.querySelector('#company');
+const exportGapsBtn = document.querySelector('#export-gaps');
+const gapCountEl = document.querySelector('#gap-count');
 const scanBtn = document.querySelector('#scan');
 const refreshResumeBtn = document.querySelector('#refresh-resume');
 const resumeStatus = document.querySelector('#resume-status');
@@ -36,6 +39,16 @@ function renderResult(data) {
   displayYears(candidateYoeEl, data.candidate_years_experience);
   resultEl.hidden = false;
 }
+function updateGapTracker(history = []) {
+  const count = Array.isArray(history) ? history.length : 0;
+  gapCountEl.textContent = `${count} ${count === 1 ? 'job' : 'jobs'} saved locally`;
+  exportGapsBtn.disabled = count === 0;
+}
+function csvCell(value) {
+  let text = String(value ?? '');
+  if (/^[\s]*[=+@\-\t\r]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+}
 function applyState(state) {
   if (state.lastMatch) renderResult(state.lastMatch);
   else resultEl.hidden = true;
@@ -44,7 +57,7 @@ function applyState(state) {
   setStatus(working ? (state.lastMatchStatus || 'Analyzing…') : (state.lastMatchStatus || ''), !working && String(state.lastMatchStatus || '').startsWith('API unavailable'));
 }
 async function saveDraft() {
-  await chrome.storage.local.set({ description: jdEl.value });
+  await chrome.storage.local.set({ description: jdEl.value, companyName: companyEl.value });
 }
 async function loadSavedResume(quiet = false) {
   refreshResumeBtn.disabled = true;
@@ -82,7 +95,22 @@ jdEl.addEventListener('input', () => {
   saveDraft(); showDetectedYears(); resultEl.hidden = true;
   chrome.storage.local.set({ lastMatch: null, lastMatchStatus: '', lastMatchSource: '' });
 });
+companyEl.addEventListener('input', saveDraft);
 refreshResumeBtn.addEventListener('click', () => loadSavedResume());
+exportGapsBtn.addEventListener('click', async () => {
+  const { gapHistory = [] } = await chrome.storage.local.get('gapHistory');
+  if (!gapHistory.length) return;
+  const rows = [['Company Name', 'Gaps'], ...gapHistory.map(item => [item.company_name, (item.gaps || []).join('; ')])];
+  const csv = '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'jobfit_gaps.csv';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
 scanBtn.addEventListener('click', async () => {
   scanBtn.disabled = true;
   setStatus('Looking for the job description on this page…');
@@ -92,10 +120,15 @@ scanBtn.addEventListener('click', async () => {
     const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => {
       const selectors = ['[data-job-description]', '[data-testid*="jobDescription"]', '[class*="jobDescription"]', '[class*="job-description"]', '#jobDescriptionText', '.description__text', '.show-more-less-html__markup', '[class*="description"]', 'article', 'main'];
       const candidates = selectors.flatMap(selector => [...document.querySelectorAll(selector)]).map(el => (el.innerText || '').trim()).filter(text => text.length > 400);
-      return { title: document.title, text: (candidates.sort((a,b) => a.length - b.length)[0] || document.body?.innerText || '').slice(0, 24000) };
+      const companySelectors = ['[data-company-name]', '[data-testid*="companyName"]', '.topcard__org-name-link', '.job-details-jobs-unified-top-card__company-name', '[class*="companyName"]', '[class*="company-name"]', '[class*="company"] a'];
+      const companyName = companySelectors.flatMap(selector => [...document.querySelectorAll(selector)])
+        .map(el => (el.innerText || el.getAttribute('data-company-name') || '').trim())
+        .find(text => text && text.length <= 160) || '';
+      return { title: document.title, companyName, text: (candidates.sort((a,b) => a.length - b.length)[0] || document.body?.innerText || '').slice(0, 24000) };
     }});
     if (!result?.text || result.text.length < 150) throw new Error('Could not find enough job text. Copy the description into the field instead.');
     jdEl.value = result.text;
+    if (result.companyName) companyEl.value = result.companyName;
     await saveDraft();
     showDetectedYears();
     resultEl.hidden = true;
@@ -106,6 +139,11 @@ scanBtn.addEventListener('click', async () => {
 });
 
 analyzeBtn.addEventListener('click', async () => {
+  if (!companyEl.value.trim()) {
+    setStatus('Enter the company name so its gaps can be saved to your tracker.', true);
+    companyEl.focus();
+    return;
+  }
   if (!resumeText) await loadSavedResume(true);
   if (!resumeText || !jdEl.value.trim()) {
     setStatus(!resumeText ? 'No resume is loaded. Add one file to the Resume folder and start the local helper.' : 'Add a job description to continue.', true);
@@ -114,8 +152,10 @@ analyzeBtn.addEventListener('click', async () => {
   resultEl.hidden = true;
   analyzeBtn.disabled = true;
   setStatus('Starting analysis…');
+  const analysisId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const companyName = companyEl.value.trim();
   try {
-    await chrome.runtime.sendMessage({ type: 'match-job', resume: resumeText, jobDescription: jdEl.value.trim() });
+    await chrome.runtime.sendMessage({ type: 'match-job', resume: resumeText, jobDescription: jdEl.value.trim(), companyName, analysisId });
   } catch (error) {
     try {
       const response = await fetch('http://127.0.0.1:8766/api/match', {
@@ -129,26 +169,32 @@ analyzeBtn.addEventListener('click', async () => {
       renderResult(data);
       const message = 'Match results from OpenAI.';
       setStatus(message);
-      await chrome.storage.local.set({ isMatching: false, lastMatch: data, lastMatchSource: 'openai', lastMatchStatus: message });
+      const gapHistory = await JobFitMatcher.saveGapRecord(companyName, data, analysisId);
+      await chrome.storage.local.set({ isMatching: false, lastMatch: data, lastMatchSource: 'openai', lastMatchStatus: message, gapHistory });
     } catch (apiError) {
       const result = JobFitMatcher.localMatch(resumeText, jdEl.value.trim());
       renderResult(result);
+      const gapHistory = await JobFitMatcher.saveGapRecord(companyName, result, analysisId);
       const message = `API unavailable; showing local estimate. ${apiError.message || error.message || 'Could not complete analysis.'}`;
       setStatus(message, true);
-      await chrome.storage.local.set({ isMatching: false, lastMatch: result, lastMatchSource: 'local', lastMatchStatus: message });
+      await chrome.storage.local.set({ isMatching: false, lastMatch: result, lastMatchSource: 'local', lastMatchStatus: message, gapHistory });
     }
   }
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || (!changes.lastMatch && !changes.lastMatchStatus && !changes.isMatching)) return;
+  if (area !== 'local') return;
+  if (changes.gapHistory) updateGapTracker(changes.gapHistory.newValue || []);
+  if (!changes.lastMatch && !changes.lastMatchStatus && !changes.isMatching) return;
   chrome.storage.local.get(['lastMatch', 'lastMatchStatus', 'isMatching']).then(applyState);
 });
 
-chrome.storage.local.get(['resume', 'resumeFilename', 'description', 'lastMatch', 'lastMatchStatus', 'isMatching']).then(state => {
+chrome.storage.local.get(['resume', 'resumeFilename', 'description', 'companyName', 'gapHistory', 'lastMatch', 'lastMatchStatus', 'isMatching']).then(state => {
   resumeText = state.resume || '';
   resumeName.textContent = state.resumeFilename || 'Resume folder';
   jdEl.value = state.description || '';
+  companyEl.value = state.companyName || '';
+  updateGapTracker(state.gapHistory || []);
   applyState(state);
   showDetectedYears();
   loadSavedResume(true);

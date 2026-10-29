@@ -15,6 +15,10 @@
       <div class="resume-card"><span class="resume-icon">▤</span><div><strong id="resume-name">Resume folder</strong><span id="resume-status">Start the local helper to load your resume.</span></div></div>
     </section>
     <section>
+      <div class="label-row"><label for="company">Company name</label><span class="helper">Auto-detected when scanning · editable</span></div>
+      <input id="company" type="text" maxlength="160" required placeholder="Enter the company name…">
+    </section>
+    <section>
       <div class="label-row"><label for="description">Job description</label><button class="text-button" id="scan" type="button">↧ Scan this page</button></div>
       <textarea id="description" rows="7" placeholder="Paste a job description, or scan the active job page…"></textarea>
     </section>
@@ -36,7 +40,11 @@
       <div id="ai-note" class="ai-note" hidden></div>
       <p class="disclaimer">An estimate based on the text provided, not a hiring decision.</p>
     </section>
-    <footer>Resume, job text, and results stay saved in this browser.</footer>
+    <section class="tracker">
+      <div><strong>Gap tracker</strong><span id="gap-count">0 jobs saved locally</span></div>
+      <button class="text-button" id="export-gaps" type="button" disabled>Download CSV</button>
+    </section>
+    <footer>Resume, job text, results, and gap history stay saved in this browser.</footer>
   </main>
   <script src="matcher.js"></script>
   <script src="popup.js"></script>

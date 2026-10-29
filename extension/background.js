@@ -22,7 +22,8 @@ async function runMatch(request) {
     result = JobFitMatcher.localMatch(request.resume, request.jobDescription);
     status = `API unavailable; showing local estimate. ${error.message || 'Could not reach the AI helper.'}`;
   }
-  await chrome.storage.local.set({ isMatching: false, lastMatch: result, lastMatchSource: source, lastMatchStatus: status });
+  const gapHistory = await JobFitMatcher.saveGapRecord(request.companyName, result, request.analysisId);
+  await chrome.storage.local.set({ isMatching: false, lastMatch: result, lastMatchSource: source, lastMatchStatus: status, gapHistory });
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

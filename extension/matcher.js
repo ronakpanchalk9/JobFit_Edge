@@ -68,5 +68,24 @@ globalThis.JobFitMatcher = (() => {
     };
   }
 
-  return { skills, minimumYears, candidateYears, localMatch };
+  async function saveGapRecord(companyName, result, analysisId) {
+    const stored = await chrome.storage.local.get('gapHistory');
+    const history = Array.isArray(stored.gapHistory) ? stored.gapHistory : [];
+    if (history.some(item => item.analysis_id === analysisId)) return history;
+
+    const uniqueGaps = [...new Set((Array.isArray(result.missing_skills) ? result.missing_skills : [])
+      .map(gap => String(gap).trim().replace(/[.!?;:]+$/, ''))
+      .filter(Boolean))];
+    history.unshift({
+      analysis_id: analysisId,
+      company_name: String(companyName || '').trim() || 'Company not provided',
+      gaps: uniqueGaps,
+      analyzed_at: new Date().toISOString(),
+    });
+    const updated = history.slice(0, 500);
+    await chrome.storage.local.set({ gapHistory: updated });
+    return updated;
+  }
+
+  return { skills, minimumYears, candidateYears, localMatch, saveGapRecord };
 })();
